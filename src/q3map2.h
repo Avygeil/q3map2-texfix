@@ -36,7 +36,7 @@
 
 /* version */
 #define Q3MAP_VERSION   "2.5.17"
-#define Q3MAP_MOTD      "We're still here"
+#define Q3MAP_MOTD      "Textures coords decompiler patch from NetRadiant ported by Alpha"
 
 
 /* -------------------------------------------------------------------------------
@@ -1713,6 +1713,10 @@ void                        LoadSurfaceExtraFile( const char *path );
 /* decals.c */
 void                        ProcessDecals( void );
 void                        MakeEntityDecals( entity_t *e );
+
+
+/* map.c */
+void                        TextureAxisFromPlane( plane_t *pln, vec3_t xv, vec3_t yv );
 
 
 /* brush_primit.c */

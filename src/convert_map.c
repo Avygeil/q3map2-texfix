@@ -46,14 +46,127 @@
 #define SNAP_FLOAT_TO_INT   4
 #define SNAP_INT_TO_FLOAT   ( 1.0 / SNAP_FLOAT_TO_INT )
 
+typedef vec_t vec2_t[2];
+
+static vec_t Det3x3( vec_t a00, vec_t a01, vec_t a02,
+	vec_t a10, vec_t a11, vec_t a12,
+	vec_t a20, vec_t a21, vec_t a22 ) {
+	return
+		a00 * ( a11 * a22 - a12 * a21 )
+		- a01 * ( a10 * a22 - a12 * a20 )
+		+ a02 * ( a10 * a21 - a11 * a20 );
+}
+
+static void GetBestSurfaceTriangleMatchForBrushside( side_t *buildSide, plane_t *buildPlane, bspDrawVert_t *bestVert[3] ) {
+	bspDrawSurface_t *s;
+	int i;
+	int t;
+	vec_t best = 0;
+	vec_t thisarea;
+	vec3_t normdiff;
+	vec3_t v1v0, v2v0, norm;
+	bspDrawVert_t *vert[3];
+	winding_t *polygon;
+	int matches = 0;
+
+	// first, start out with NULLs
+	bestVert[0] = bestVert[1] = bestVert[2] = NULL;
+
+	// brute force through all surfaces
+	for ( s = bspDrawSurfaces; s != bspDrawSurfaces + numBSPDrawSurfaces; ++s )
+	{
+		if ( s->surfaceType != MST_PLANAR && s->surfaceType != MST_TRIANGLE_SOUP ) {
+			continue;
+		}
+		if ( strcmp( buildSide->shaderInfo->shader, bspShaders[s->shaderNum].shader ) ) {
+			continue;
+		}
+		for ( t = 0; t + 3 <= s->numIndexes; t += 3 )
+		{
+			vert[0] = &bspDrawVerts[s->firstVert + bspDrawIndexes[s->firstIndex + t + 0]];
+			vert[1] = &bspDrawVerts[s->firstVert + bspDrawIndexes[s->firstIndex + t + 1]];
+			vert[2] = &bspDrawVerts[s->firstVert + bspDrawIndexes[s->firstIndex + t + 2]];
+			if ( s->surfaceType == MST_PLANAR && VectorCompare( vert[0]->normal, vert[1]->normal ) && VectorCompare( vert[1]->normal, vert[2]->normal ) ) {
+				VectorSubtract( vert[0]->normal, buildPlane->normal, normdiff ); if ( VectorLength( normdiff ) >= normalEpsilon ) {
+					continue;
+				}
+				VectorSubtract( vert[1]->normal, buildPlane->normal, normdiff ); if ( VectorLength( normdiff ) >= normalEpsilon ) {
+					continue;
+				}
+				VectorSubtract( vert[2]->normal, buildPlane->normal, normdiff ); if ( VectorLength( normdiff ) >= normalEpsilon ) {
+					continue;
+				}
+			}
+			else
+			{
+				// this is more prone to roundoff errors, but with embedded
+				// models, there is no better way
+				VectorSubtract( vert[1]->xyz, vert[0]->xyz, v1v0 );
+				VectorSubtract( vert[2]->xyz, vert[0]->xyz, v2v0 );
+				CrossProduct( v2v0, v1v0, norm );
+				VectorNormalize( norm, norm );
+				VectorSubtract( norm, buildPlane->normal, normdiff ); if ( VectorLength( normdiff ) >= normalEpsilon ) {
+					continue;
+				}
+			}
+			if ( abs( DotProduct( vert[0]->xyz, buildPlane->normal ) - buildPlane->dist ) >= distanceEpsilon ) {
+				continue;
+			}
+			if ( abs( DotProduct( vert[1]->xyz, buildPlane->normal ) - buildPlane->dist ) >= distanceEpsilon ) {
+				continue;
+			}
+			if ( abs( DotProduct( vert[2]->xyz, buildPlane->normal ) - buildPlane->dist ) >= distanceEpsilon ) {
+				continue;
+			}
+			// Okay. Correct surface type, correct shader, correct plane. Let's start with the business...
+			polygon = CopyWinding( buildSide->winding );
+			for ( i = 0; i < 3; ++i )
+			{
+				// 0: 1, 2
+				// 1: 2, 0
+				// 2; 0, 1
+				vec3_t *v1 = &vert[( i + 1 ) % 3]->xyz;
+				vec3_t *v2 = &vert[( i + 2 ) % 3]->xyz;
+				vec3_t triNormal;
+				vec_t triDist;
+				vec3_t sideDirection;
+				// we now need to generate triNormal and triDist so that they represent the plane spanned by normal and (v2 - v1).
+				VectorSubtract( *v2, *v1, sideDirection );
+				CrossProduct( sideDirection, buildPlane->normal, triNormal );
+				triDist = DotProduct( *v1, triNormal );
+				ChopWindingInPlace( &polygon, triNormal, triDist, distanceEpsilon );
+				if ( !polygon ) {
+					goto exwinding;
+				}
+			}
+			thisarea = WindingArea( polygon );
+			if ( thisarea > 0 ) {
+				++matches;
+			}
+			if ( thisarea > best ) {
+				best = thisarea;
+				bestVert[0] = vert[0];
+				bestVert[1] = vert[1];
+				bestVert[2] = vert[2];
+			}
+			FreeWinding( polygon );
+		exwinding:
+			;
+		}
+	}
+}
+
+#define FRAC( x ) ( ( x ) - floor( x ) )
+
 static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 	int i, j;
 	bspBrushSide_t  *side;
 	side_t          *buildSide;
 	bspShader_t     *shader;
 	char            *texture;
-	bspPlane_t      *plane;
-	vec3_t pts[ 3 ];
+	plane_t         *buildPlane;
+	vec3_t          pts[ 3 ];
+	bspDrawVert_t   *vert[3];
 
 
 	/* start brush */
@@ -86,9 +199,6 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 			continue;
 		}
 
-		/* get plane */
-		plane = &bspPlanes[ side->planeNum ];
-
 		/* add build side */
 		buildSide = &buildBrush->sides[ buildBrush->numsides ];
 		buildBrush->numsides++;
@@ -110,10 +220,25 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 		/* get build side */
 		buildSide = &buildBrush->sides[ i ];
 
+		/* get plane */
+		buildPlane = &mapplanes[buildSide->planenum];
+
 		/* dummy check */
 		if ( buildSide->shaderInfo == NULL || buildSide->winding == NULL ) {
 			continue;
 		}
+
+		// st-texcoords -> texMat block
+		// start out with dummy
+		VectorSet( buildSide->texMat[0], 1 / 32.0, 0, 0 );
+		VectorSet( buildSide->texMat[1], 0, 1 / 32.0, 0 );
+
+		// find surface for this side (by brute force)
+		// surface format:
+		//   - meshverts point in pairs of three into verts
+		//   - (triangles)
+		//   - find the triangle that has most in common with our side
+		GetBestSurfaceTriangleMatchForBrushside( buildSide, buildPlane, vert );
 
 		/* get texture name */
 		if ( !Q_strncasecmp( buildSide->shaderInfo->shader, "textures/", 9 ) ) {
@@ -132,13 +257,120 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 			//%	pts[ j ][ 2 ] = SNAP_INT_TO_FLOAT * floor( pts[ j ][ 2 ] * SNAP_FLOAT_TO_INT + 0.5f );
 		}
 
-		/* print brush side */
-		/* ( 640 24 -224 ) ( 448 24 -224 ) ( 448 -232 -224 ) common/caulk 0 48 0 0.500000 0.500000 0 0 0 */
-		fprintf( f, "\t\t( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) %s 0 0 0 0.5 0.5 0 0 0\n",
-				 pts[ 0 ][ 0 ], pts[ 0 ][ 1 ], pts[ 0 ][ 2 ],
-				 pts[ 1 ][ 0 ], pts[ 1 ][ 1 ], pts[ 1 ][ 2 ],
-				 pts[ 2 ][ 0 ], pts[ 2 ][ 1 ], pts[ 2 ][ 2 ],
-				 texture );
+		if ( vert[0] && vert[1] && vert[2] ) {
+			// invert QuakeTextureVecs
+			int i;
+			vec3_t vecs[2];
+			int sv, tv;
+			vec2_t stI, stJ, stK;
+			vec3_t sts[2];
+			vec2_t shift, scale;
+			vec_t rotate;
+			vec_t D, D0, D1, D2;
+
+			TextureAxisFromPlane( buildPlane, vecs[0], vecs[1] );
+			if ( vecs[0][0] ) {
+				sv = 0;
+			}
+			else if ( vecs[0][1] ) {
+				sv = 1;
+			}
+			else {
+				sv = 2;
+			}
+			if ( vecs[1][0] ) {
+				tv = 0;
+			}
+			else if ( vecs[1][1] ) {
+				tv = 1;
+			}
+			else {
+				tv = 2;
+			}
+
+			stI[0] = vert[0]->st[0] * buildSide->shaderInfo->shaderWidth; stI[1] = vert[0]->st[1] * buildSide->shaderInfo->shaderHeight;
+			stJ[0] = vert[1]->st[0] * buildSide->shaderInfo->shaderWidth; stJ[1] = vert[1]->st[1] * buildSide->shaderInfo->shaderHeight;
+			stK[0] = vert[2]->st[0] * buildSide->shaderInfo->shaderWidth; stK[1] = vert[2]->st[1] * buildSide->shaderInfo->shaderHeight;
+
+			D = Det3x3(
+				vert[0]->xyz[sv], vert[0]->xyz[tv], 1,
+				vert[1]->xyz[sv], vert[1]->xyz[tv], 1,
+				vert[2]->xyz[sv], vert[2]->xyz[tv], 1
+			);
+			if ( D != 0 ) {
+				for ( i = 0; i < 2; ++i )
+				{
+					D0 = Det3x3(
+						stI[i], vert[0]->xyz[tv], 1,
+						stJ[i], vert[1]->xyz[tv], 1,
+						stK[i], vert[2]->xyz[tv], 1
+					);
+					D1 = Det3x3(
+						vert[0]->xyz[sv], stI[i], 1,
+						vert[1]->xyz[sv], stJ[i], 1,
+						vert[2]->xyz[sv], stK[i], 1
+					);
+					D2 = Det3x3(
+						vert[0]->xyz[sv], vert[0]->xyz[tv], stI[i],
+						vert[1]->xyz[sv], vert[1]->xyz[tv], stJ[i],
+						vert[2]->xyz[sv], vert[2]->xyz[tv], stK[i]
+					);
+					VectorSet( sts[i], D0 / D, D1 / D, D2 / D );
+				}
+			}
+			else {
+				fprintf( stderr, "degenerate triangle found when solving texDef equations\n" ); // FIXME add stuff here
+			}
+			// now we must solve:
+			//	ang = rotate / 180 * Q_PI;
+			//	sinv = sin(ang);
+			//	cosv = cos(ang);
+			//	ns = cosv * vecs[0][sv];
+			//	nt = sinv * vecs[0][sv];
+			//	vecsrotscaled[0][sv] = ns / scale[0];
+			//	vecsrotscaled[0][tv] = nt / scale[0];
+			//	ns = -sinv * vecs[1][tv];
+			//	nt =  cosv * vecs[1][tv];
+			//	vecsrotscaled[1][sv] = ns / scale[1];
+			//	vecsrotscaled[1][tv] = nt / scale[1];
+			scale[0] = 1.0 / sqrt( sts[0][0] * sts[0][0] + sts[0][1] * sts[0][1] );
+			scale[1] = 1.0 / sqrt( sts[1][0] * sts[1][0] + sts[1][1] * sts[1][1] );
+			rotate = atan2( sts[0][1] * vecs[0][sv] - sts[1][0] * vecs[1][tv], sts[0][0] * vecs[0][sv] + sts[1][1] * vecs[1][tv] ) * ( 180.0f / Q_PI );
+			shift[0] = buildSide->shaderInfo->shaderWidth * FRAC( sts[0][2] / buildSide->shaderInfo->shaderWidth );
+			shift[1] = buildSide->shaderInfo->shaderHeight * FRAC( sts[1][2] / buildSide->shaderInfo->shaderHeight );
+
+			/* print brush side */
+			/* ( 640 24 -224 ) ( 448 24 -224 ) ( 448 -232 -224 ) common/caulk 0 48 0 0.500000 0.500000 0 0 0 */
+			fprintf( f, "\t\t( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) %s %.8f %.8f %.8f %.8f %.8f 0 0 0\n",
+				pts[0][0], pts[0][1], pts[0][2],
+				pts[1][0], pts[1][1], pts[1][2],
+				pts[2][0], pts[2][1], pts[2][2],
+				texture,
+				shift[0], shift[1], rotate, scale[0], scale[1]
+			);
+		} else {
+			vec3_t vecs[2];
+			if ( strncmp( buildSide->shaderInfo->shader, "textures/system/", 16 )
+				&& strncmp( buildSide->shaderInfo->shader, "textures/fogs/", 14 )
+				&& strncmp( buildSide->shaderInfo->shader, "textures/skies/", 15 ) 
+				&& strcmp( buildSide->shaderInfo->shader, "noshader" )
+				&& strcmp( buildSide->shaderInfo->shader, "default" ) ) {
+				// warn if triangle couldn't be found
+				fprintf( stderr, "no matching triangle for brushside using %s (hopefully nobody can see this side anyway)\n", buildSide->shaderInfo->shader );
+			}
+
+			MakeNormalVectors( buildPlane->normal, vecs[0], vecs[1] );
+			VectorMA( vec3_origin, buildPlane->dist, buildPlane->normal, pts[0] );
+			VectorMA( pts[0], 256.0f, vecs[0], pts[1] );
+			VectorMA( pts[0], 256.0f, vecs[1], pts[2] );
+			
+			fprintf( f, "\t\t( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) %s 0 0 0 0.250000 0.250000 0 0 0\n",
+				pts[0][0], pts[0][1], pts[0][2],
+				pts[1][0], pts[1][1], pts[1][2],
+				pts[2][0], pts[2][1], pts[2][2],
+				texture
+			);
+		}
 	}
 
 	/* end brush */
