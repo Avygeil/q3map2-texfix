@@ -349,7 +349,6 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 				shift[0], shift[1], rotate, scale[0], scale[1]
 			);
 		} else {
-			vec3_t vecs[2];
 			if ( strncmp( buildSide->shaderInfo->shader, "textures/system/", 16 )
 				&& strncmp( buildSide->shaderInfo->shader, "textures/fogs/", 14 )
 				&& strncmp( buildSide->shaderInfo->shader, "textures/skies/", 15 ) 
@@ -358,11 +357,6 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 				// warn if triangle couldn't be found
 				fprintf( stderr, "no matching triangle for brushside using %s (hopefully nobody can see this side anyway)\n", buildSide->shaderInfo->shader );
 			}
-
-			MakeNormalVectors( buildPlane->normal, vecs[0], vecs[1] );
-			VectorMA( vec3_origin, buildPlane->dist, buildPlane->normal, pts[0] );
-			VectorMA( pts[0], 256.0f, vecs[0], pts[1] );
-			VectorMA( pts[0], 256.0f, vecs[1], pts[2] );
 			
 			fprintf( f, "\t\t( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) %s 0 0 0 0.250000 0.250000 0 0 0\n",
 				pts[0][0], pts[0][1], pts[0][2],
