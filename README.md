@@ -14,7 +14,7 @@ See the Releases tab in Github.
 
 In order to scale textures properly, some shader information has to be read from a "VFS" (Virtual File System). The VFS is set with the `-fs_basepath "path/to/vfs"` parameter.
 
-You must set this parameter to a folder that contains shaders and shaderlist. You should be able to use the same folder as you use with Radiant. If you want to make a separate, clean base folder for decompiling, just start Radiant in a new folder that contains assets and it will automatically generate the files for you.
+You must set this parameter to a folder that contains **shaders, shaderlist and the assets files of the map you are going to decompile**. You should be able to use the same folder as you use with Radiant. If you want to make a separate, clean base folder for decompiling, just start Radiant in a new folder that contains assets and it will automatically generate the files for you.
 
 **The VFS parameter must be set to the folder that contains the base folder with shaders, not the base folder itself (contrary to what the name implies)!**
 
