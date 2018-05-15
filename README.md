@@ -14,9 +14,11 @@ See the Releases tab in Github.
 
 In order to scale textures properly, some shader information has to be read from a "VFS" (Virtual File System). The VFS is set with the `-fs_basepath "path/to/vfs"` parameter.
 
-You must set this parameter to a folder that contains **shaders, shaderlist and the assets files of the map you are going to decompile**. You should be able to use the same folder as you use with Radiant. If you want to make a separate, clean base folder for decompiling, just start Radiant in a new folder that contains assets and it will automatically generate the files for you.
+**IMPORTANT: The VFS is the folder that contains the `/base` folder. Contrary to what the name implies, don't set `-fs_basepath` to the base folder itself! Use its parent folder instead.**
 
-**The VFS parameter must be set to the folder that contains the base folder with shaders, not the base folder itself (contrary to what the name implies)!**
+**The base folder must contain the shaderlist and all shaders used by the map you are going to decompile.** This means that you should copy the `.pk3` file that contains the shaders used by the map. Any missing shader will be scaled incorrectly.
+
+You should be able to use the same base folder as you use with Radiant. If you want to make a separate, clean folder for decompiling, just start Radiant in a new folder that contains assets and it will automatically generate the files for you.
 
 ```shell
 $ q3map2 -game ja -fs_basepath "path/to/vfs" -convert -format map "path/to/bsp"
