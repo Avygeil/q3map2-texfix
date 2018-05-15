@@ -12,9 +12,11 @@ See the Releases tab in Github.
 
 ## Usage
 
-Since some shader information has to be read, make sure you use a VFS with shaders and shaderlist as the `-fs_basepath` parameter. Running Radiant in a new folder that contains your assets should generate the necessary files.
+In order to scale textures properly, some shader information has to be read from a "VFS" (Virtual File System). The VFS is set with the `-fs_basepath "path/to/vfs"` parameter.
 
-Other than that, the command is the same. Example for Jedi Academy:
+You must set this parameter to a folder that contains shaders and shaderlist. You should be able to use the same folder as you use with Radiant. If you want to make a separate, clean base folder for decompiling, just start Radiant in a new folder that contains assets and it will automatically generate the files for you.
+
+**The VFS parameter must be set to the folder that contains the base folder with shaders, not the base folder itself (contrary to what the name implies)!**
 
 ```shell
 $ q3map2 -game ja -fs_basepath "path/to/vfs" -convert -format map "path/to/bsp"
