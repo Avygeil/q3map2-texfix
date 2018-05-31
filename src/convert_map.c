@@ -604,8 +604,8 @@ static void ConvertEPairs( FILE *f, entity_t *e ){
    exports an quake map file from the bsp
  */
 
-int ConvertBSPToMap( char *bspName ){
-	int i, modelNum;
+int ConvertBSPToMap( char *bspName, char **ignoredEnts, int numIgnoredEnts ){
+	int i, j, modelNum;
 	FILE            *f;
 	bspModel_t      *model;
 	entity_t        *e;
@@ -640,6 +640,32 @@ int ConvertBSPToMap( char *bspName ){
 	{
 		/* get entity */
 		e = &entities[ i ];
+
+		qboolean isWorldspawn = qfalse, ignore = qfalse;
+		value = ValueForKey( e, "classname" );
+
+		if ( value && *value ) {
+			if ( !strcmp( value, "worldspawn" ) ) {
+				isWorldspawn = qtrue;
+			}
+
+			/* check for ignored classname */
+			for ( j = 0; j < numIgnoredEnts; j++ ) {
+				if ( !stricmp( value, ignoredEnts[j] ) ) {
+					ignore = qtrue;
+
+					if ( verbose ) {
+						Sys_Printf( "ignored entity %d (%s)\n", i, value );
+					}
+
+					break;
+				}
+			}
+		}
+
+		if ( ignore ) {
+			continue;
+		}
 
 		/* start entity */
 		fprintf( f, "// entity %d\n", i );
@@ -680,14 +706,7 @@ int ConvertBSPToMap( char *bspName ){
 
 			/* only track unmatched brushside triangle for the worldspawn brushes */
 			int noTriangleSideCount = 0;
-			int *noTriangleSideCountPtr;
-
-			value = ValueForKey( e, "classname" );
-			if ( value[0] == '\0' || stricmp( value, "worldspawn" ) ) {
-				noTriangleSideCountPtr = NULL;
-			} else {
-				noTriangleSideCountPtr = &noTriangleSideCount;
-			}
+			int *noTriangleSideCountPtr = isWorldspawn ? &noTriangleSideCount : NULL;
 
 			/* convert model */
 			ConvertModel( f, model, modelNum, origin, noTriangleSideCountPtr );

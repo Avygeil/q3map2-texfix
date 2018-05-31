@@ -40,8 +40,10 @@
 
 int ConvertBSPMain( int argc, char **argv ){
 	int i;
-	int ( *convertFunc )( char * );
+	int ( *convertFunc )( char *, char **, int );
 	game_t  *convertGame;
+	char* ignoredEnts[128];
+	int numIgnoredEnts = 0;
 
 
 	/* set default */
@@ -71,6 +73,19 @@ int ConvertBSPMain( int argc, char **argv ){
 				convertGame = GetGame( argv[ i ] );
 				if ( convertGame == NULL ) {
 					Sys_Printf( "Unknown conversion format \"%s\". Defaulting to ASE.\n", argv[ i ] );
+				}
+			}
+		}
+		/* -stripents *ent1 *ent2... */
+		else if ( !strcmp( argv[ i ], "-stripents" ) ) {
+			// consider all the following arguments until not prefixed by * and build the list
+			while ( *argv[ i + 1 ] == '*' ) {
+				char* classname = argv[ ++i ] + 1;
+				
+				if ( *classname ) {
+					ignoredEnts[numIgnoredEnts] = safe_malloc( ( strlen( classname ) + 1 ) * sizeof( char ) );
+					strcpy( ignoredEnts[numIgnoredEnts], classname );
+					++numIgnoredEnts;
 				}
 			}
 		}
@@ -109,5 +124,11 @@ int ConvertBSPMain( int argc, char **argv ){
 	}
 
 	/* normal convert */
-	return convertFunc( source );
+	int result = convertFunc( source, ignoredEnts, numIgnoredEnts );
+
+	while ( numIgnoredEnts > 0 ) {
+		free( ignoredEnts[--numIgnoredEnts] );
+	}
+
+	return result;
 }

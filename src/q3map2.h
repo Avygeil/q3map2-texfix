@@ -1509,11 +1509,11 @@ int                         ConvertBSPMain( int argc, char **argv );
 
 
 /* convert_map.c */
-int                         ConvertBSPToMap( char *bspName );
+int                         ConvertBSPToMap( char *bspName, char **ignoredEnts, int numIgnoredEnts );
 
 
 /* convert_ase.c */
-int                         ConvertBSPToASE( char *bspName );
+int                         ConvertBSPToASE( char *bspName, char **ignoredEnts, int numIgnoredEnts );
 
 
 /* brush.c */

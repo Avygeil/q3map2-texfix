@@ -286,7 +286,7 @@ static void ConvertShader( FILE *f, bspShader_t *shader, int shaderNum ){
    exports an 3d studio ase file from the bsp
  */
 
-int ConvertBSPToASE( char *bspName ){
+int ConvertBSPToASE( char *bspName, char **ignoredEnts, int numIgnoredEnts ) {
 	int i, modelNum;
 	FILE            *f;
 	bspShader_t     *shader;
