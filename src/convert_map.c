@@ -346,7 +346,7 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 				pts[1][0], pts[1][1], pts[1][2],
 				pts[2][0], pts[2][1], pts[2][2],
 				texture,
-				shift[0], shift[1], rotate, scale[0], scale[1]
+				shift[0], shift[1], Q_rint( rotate ), scale[0], scale[1]
 			);
 		} else {
 			if ( strncmp( buildSide->shaderInfo->shader, "textures/system/", 16 )
