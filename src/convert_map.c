@@ -359,7 +359,7 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin, in
 					&& strcmp( buildSide->shaderInfo->shader, "default" ) ) {
 
 					if ( verbose ) {
-						fprintf( stderr, "no matching triangle for brushside using %s (hopefully nobody can see this side anyway)\n", buildSide->shaderInfo->shader );
+						fprintf( stderr, "no matching triangle for brushside using %s\n", buildSide->shaderInfo->shader );
 					}
 
 					( *noTriangleSideCountPtr )++;
