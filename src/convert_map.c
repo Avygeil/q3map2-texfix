@@ -158,7 +158,7 @@ static void GetBestSurfaceTriangleMatchForBrushside( side_t *buildSide, plane_t 
 
 #define FRAC( x ) ( ( x ) - floor( x ) )
 
-static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
+static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin, int *noTriangleSideCountPtr ){
 	int i, j;
 	bspBrushSide_t  *side;
 	side_t          *buildSide;
@@ -349,13 +349,16 @@ static void ConvertBrush( FILE *f, int num, bspBrush_t *brush, vec3_t origin ){
 				shift[0], shift[1], Q_rint( rotate ), scale[0], scale[1]
 			);
 		} else {
-			if ( strncmp( buildSide->shaderInfo->shader, "textures/system/", 16 )
-				&& strncmp( buildSide->shaderInfo->shader, "textures/fogs/", 14 )
-				&& strncmp( buildSide->shaderInfo->shader, "textures/skies/", 15 ) 
-				&& strcmp( buildSide->shaderInfo->shader, "noshader" )
-				&& strcmp( buildSide->shaderInfo->shader, "default" ) ) {
-				// warn if triangle couldn't be found
-				fprintf( stderr, "no matching triangle for brushside using %s (hopefully nobody can see this side anyway)\n", buildSide->shaderInfo->shader );
+			if ( noTriangleSideCountPtr ) {
+				// ignore special shaders
+				if ( strncmp( buildSide->shaderInfo->shader, "textures/system/", 16 )
+					&& strncmp( buildSide->shaderInfo->shader, "textures/common/", 16 )
+					&& strncmp( buildSide->shaderInfo->shader, "textures/fogs/", 14 )
+					&& strncmp( buildSide->shaderInfo->shader, "textures/skies/", 15 )
+					&& strcmp( buildSide->shaderInfo->shader, "noshader" )
+					&& strcmp( buildSide->shaderInfo->shader, "default" ) ) {
+					( *noTriangleSideCountPtr )++;
+				}
 			}
 			
 			fprintf( f, "\t\t( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) ( %.3f %.3f %.3f ) %s 0 0 0 0.250000 0.250000 0 0 0\n",
@@ -515,7 +518,7 @@ static void ConvertPatch( FILE *f, int num, bspDrawSurface_t *ds, vec3_t origin 
    exports a bsp model to a map file
  */
 
-static void ConvertModel( FILE *f, bspModel_t *model, int modelNum, vec3_t origin ){
+static void ConvertModel( FILE *f, bspModel_t *model, int modelNum, vec3_t origin, int *noTriangleSideCountPtr ){
 	int i, num;
 	bspBrush_t          *brush;
 	bspDrawSurface_t    *ds;
@@ -541,7 +544,7 @@ static void ConvertModel( FILE *f, bspModel_t *model, int modelNum, vec3_t origi
 	{
 		num = i + model->firstBSPBrush;
 		brush = &bspBrushes[ num ];
-		ConvertBrush( f, num, brush, origin );
+		ConvertBrush( f, num, brush, origin, noTriangleSideCountPtr );
 	}
 
 	/* free the build brush */
@@ -670,8 +673,23 @@ int ConvertBSPToMap( char *bspName ){
 				GetVectorForKey( e, "origin", origin );
 			}
 
+			/* only track unmatched brushside triangle for the worldspawn brushes */
+			int noTriangleSideCount = 0;
+			int *noTriangleSideCountPtr;
+
+			value = ValueForKey( e, "classname" );
+			if ( value[0] == '\0' || stricmp( value, "worldspawn" ) ) {
+				noTriangleSideCountPtr = NULL;
+			} else {
+				noTriangleSideCountPtr = &noTriangleSideCount;
+			}
+
 			/* convert model */
-			ConvertModel( f, model, modelNum, origin );
+			ConvertModel( f, model, modelNum, origin, noTriangleSideCountPtr );
+
+			if ( noTriangleSideCountPtr ) {
+				Sys_Printf( "Found no matching triangle for %d brushsides in total\n", noTriangleSideCount );
+			}
 		}
 
 		/* end entity */
